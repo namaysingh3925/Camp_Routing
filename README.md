@@ -375,11 +375,7 @@ A render.yaml configuration file is included. In the Render dashboard:
 2. Select the repository.
 3. The build command `pip install -r requirements.txt` and start command `gunicorn app:app` will be configured automatically.
 
-### Alternative Hosts
-A Procfile is provided in the root directory for deployment on platforms such as Railway, Fly.io, or Heroku:
-```
-web: gunicorn app:app
-```
+
 
 ## Technology Stack
 

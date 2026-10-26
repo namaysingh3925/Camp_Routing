@@ -2,6 +2,33 @@
 
 A pathfinding web application that calculates and visualizes shortest walking routes on real road networks. The system implements Dijkstra and A-Star algorithms from scratch in Python, utilizing a custom-built binary min-heap priority queue without external heap libraries. The backend is served via Flask and the interactive map interface is rendered with Leaflet and OpenStreetMap.
 
+## Table of Contents
+
+- Features
+- System Architecture
+- Project Workflow
+  - Runtime System Workflow
+  - Execution Pipeline
+  - Project Development Roadmap
+- Algorithmic Implementation
+  - Priority Queue (MinHeap)
+  - Dijkstra vs A-Star
+- API Reference
+  - GET /api/graph
+  - GET /api/nearest
+  - POST /api/route
+- Directory Structure
+- Getting Started
+  - Prerequisites
+  - Installation
+- Using Custom Geographic Data
+- Automated Testing
+- Deployment
+  - Render
+  - Alternative Hosts
+- Technology Stack
+- License
+
 ## Features
 
 - Interactive Map Selection: Click anywhere on the map to place start and destination pins, automatically snapping to the nearest road network node.
@@ -23,42 +50,123 @@ The project consists of three primary layers:
 
 ## Project Workflow
 
-The application operates through an integrated pipeline spanning data extraction, spatial indexing, algorithmic pathfinding, and interactive rendering:
+### Runtime System Workflow
 
-### 1. Data Ingestion and Graph Construction
-- Road network data is extracted from OpenStreetMap using the Overpass API via tools/fetch_osm.py for a specified bounding box.
-- Walkable highways, footways, and paths are parsed into nodes (coordinates) and undirected edges.
-- A Breadth-First Search (BFS) identifies and preserves only the largest connected component, eliminating unreachable disconnected segments.
-- Graph data is serialized to JSON (data/campus.json).
-- On application startup, the JSON data is loaded into memory as an adjacency list representation. Edge weights are computed in meters using the Haversine great-circle formula.
+```
++-------------------------------------------------------------------+
+|                        User Interface                             |
+|  - Select start/end points on Leaflet map or via landmark search  |
+|  - Choose algorithm: Dijkstra, A-Star, or Compare Both            |
+|  - Optional: Click road segments to mark as blocked               |
++---------------------------------+---------------------------------+
+                                  |
+                                  v
++---------------------------------+---------------------------------+
+|                    Coordinate Snapping                            |
+|  - HTTP GET /api/nearest?lat={lat}&lng={lng}                      |
+|  - Spatial Euclidean/Haversine search finds closest graph node    |
++---------------------------------+---------------------------------+
+                                  |
+                                  v
++---------------------------------+---------------------------------+
+|                     Pathfinding Request                           |
+|  - HTTP POST /api/route                                           |
+|  - Payload: {start, end, algo, blocked}                           |
++---------------------------------+---------------------------------+
+                                  |
+                                  v
++---------------------------------+---------------------------------+
+|                     Computational Engine                          |
+|  - Initialize custom MinHeap priority queue                       |
+|  - Filter out blocked edges from graph traversal                  |
+|  - Priority function:                                             |
+|      * Dijkstra: f(n) = g(n)                                      |
+|      * A-Star:   f(n) = g(n) + h(n)  [Haversine straight-line]    |
+|  - Relax neighboring edges and record exploration sequence        |
+|  - Backtrack predecessor pointers to construct shortest path      |
++---------------------------------+---------------------------------+
+                                  |
+                                  v
++---------------------------------+---------------------------------+
+|                   Visualization and Analytics                     |
+|  - Response: path coordinates, visited nodes, distance, runtime   |
+|  - Progressive animation of explored frontier nodes on map        |
+|  - Draw route polyline overlay                                    |
+|  - Display walking duration (at 1.4 m/s) and comparison metrics   |
++-------------------------------------------------------------------+
+```
 
-### 2. User Input and Coordinate Snapping
-- The client initializes the Leaflet map and queries the GET /api/graph endpoint to render road lines and populate landmark suggestions.
-- When a user clicks on the map or selects a landmark, geographic coordinates (latitude and longitude) are sent to GET /api/nearest.
-- The server performs a spatial nearest-neighbor search across all graph nodes using Haversine distance, returning the closest valid node identifier to anchor the route.
+### Execution Pipeline
 
-### 3. Pathfinding Request Processing
-- Upon selecting both start and target nodes, the frontend submits a POST request to /api/route containing:
-  - Start node ID
-  - End node ID
-  - Selected algorithm mode (Dijkstra, A-Star, or Compare)
-  - Active list of blocked edge keys
-- The routing engine initializes a MinHeap instance.
-- If Dijkstra is selected, the priority of each node is solely its cumulative path cost g(n) from the start.
-- If A-Star is selected, the priority is f(n) = g(n) + h(n), where h(n) represents the Haversine distance from node n to the destination. Because straight-line distance is always less than or equal to actual road distance, the heuristic is admissible and mathematically guarantees the optimal shortest path.
-- The search loop pops the minimum-cost node from the heap, checks for goal attainment, records the node in the visited history list, and relaxes adjacent edges that are not in the blocked set.
-- Upon reaching the goal, the path is reconstructed by traversing predecessor pointers backward from target to source.
+1. Geographic Data Ingestion:
+   - Geographic bounding box coordinates are provided to tools/fetch_osm.py.
+   - Walkable highway ways, footways, and named amenities are extracted from OpenStreetMap via the Overpass API.
+   - Breadth-First Search (BFS) is executed across all edge pairs to isolate the largest connected component, ensuring all nodes in the dataset are mutually reachable.
+   - Data is stored in data/campus.json. On server launch, app.py parses this data into an in-memory adjacency list, computing edge weights in meters using the Haversine great-circle formula.
 
-### 4. Search Visualization and Route Rendering
-- The API responds with the computed path array, total distance, runtime, and the sequential list of visited nodes.
-- When animation is enabled, the browser animates circles at the coordinates of each visited node in the order they were evaluated, allowing visual comparison between Dijkstra circular frontier expansion and A-Star goal-directed beam expansion.
-- The final path is rendered as an overlay polyline along the road network.
-- The stats panel calculates walking duration by dividing total meters by 1.4 m/s and displays node exploration counts and execution runtimes.
+2. Map Initialization and Client Ingestion:
+   - On page load, static/js/ui.js queries GET /api/graph.
+   - Leaflet renders OpenStreetMap raster map tiles and sets up an interactive vector canvas for roads.
+   - Landmark locations are parsed and inserted into datalist elements for autocomplete search.
 
-### 5. Dynamic Obstacle Avoidance
-- Users can toggle road block mode and click any road segment to mark it as obstructed.
-- Blocked edges are styled as dashed red lines and appended to the blocked edge set.
-- The client re-triggers the route computation, enabling real-time detour calculation around closed roads.
+3. Spatial Snapping:
+   - Clicking on the map or picking a landmark triggers a GET request to /api/nearest.
+   - The backend performs nearest-neighbor search by computing distance from the clicked coordinates to all graph vertices, snapping the user marker to the nearest valid road network node.
+
+4. Path Calculation and Search Exploration:
+   - Once start and destination nodes are established, a POST request is sent to /api/route with node identifiers, algorithm choice, and currently blocked edges.
+   - The algorithm pushes the source node into a custom MinHeap priority queue.
+   - Dijkstra evaluates vertices by distance traversed from start g(n).
+   - A-Star evaluates vertices by f(n) = g(n) + h(n), where h(n) is the Haversine distance heuristic to the destination.
+   - Traversal skips blocked road edges. As nodes are settled, their identifiers are recorded into a chronological visited list.
+   - Upon reaching the destination node, the shortest path is reconstructed by traversing backwards through the predecessor map.
+
+5. Visual Rendering and Metric Calculation:
+   - The API returns the path, distance, execution duration, and visited node sequence.
+   - When animation is toggled on, the client animates circle markers at each visited node in sequence, visually illustrating the directional difference between Dijkstra radial expansion and A-Star targeted search.
+   - The final route is rendered as an overlay polyline.
+   - Metrics are rendered in the panel: distance in meters, walking time (meters divided by 1.4 m/s pedestrian speed), execution runtime in milliseconds, and total node exploration count.
+
+6. Dynamic Obstacle Avoidance:
+   - When road block mode is active, clicking an edge adds it to the active blocked edge set and styles it with dashed red lines.
+   - The client immediately re-invokes /api/route, recalculating an alternate route around the obstruction without reloading the page.
+
+### Project Development Roadmap
+
+1. Phase 0: Setup and Scaffolding
+   - Initialized Git repository, established folder structure (data, docs, routing, static, tests, tools), and configured dependency specifications.
+
+2. Phase 1: Interactive Map Integration
+   - Integrated Leaflet map library with OpenStreetMap tile layer.
+   - Implemented click-to-place markers for origin and destination with reset controls.
+
+3. Phase 2: Graph Data Pipeline
+   - Developed tools/fetch_osm.py to query the Overpass API and extract pedestrian paths.
+   - Implemented BFS largest connected component filter to avoid isolated subgraphs.
+   - Built adjacency list graph representation with Haversine distance edge weights.
+   - Rendered graph overlay on the map for connectivity debugging.
+
+4. Phase 3: Core Algorithm Implementation
+   - Implemented coordinate snapping via spatial nearest-node lookup.
+   - Constructed a custom binary min-heap priority queue without external dependencies.
+   - Implemented Dijkstra and A-Star algorithms sharing a unified relaxation loop.
+   - Authored pytest test suite verifying shortest path optimality and heuristic admissibility.
+
+5. Phase 4: Route Delivery and UI
+   - Rendered path polylines, calculated physical distances, and computed pedestrian walking time.
+   - Built UI controls to switch between Dijkstra, A-Star, and side-by-side comparison.
+   - Handled error states for unreachable paths.
+
+6. Phase 5: Standout Features
+   - Search frontier animation showing nodes explored by each algorithm.
+   - Performance comparison metrics panel tracking visited nodes, time, and distance.
+   - Dynamic road blocking allowing users to click road segments to force real-time recalculations.
+   - Landmark search with autocomplete for campus points of interest.
+
+7. Phase 6: Polish and Deployment
+   - Implemented responsive mobile layout and dark mode theme.
+   - Set up GitHub Actions workflow for automated test runs on push.
+   - Configured Render blueprint (render.yaml) and Procfile for cloud hosting.
 
 ## Algorithmic Implementation
 

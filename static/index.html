@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Route Finder</title>
+  <meta name="description" content="Shortest walking routes on a real road network, with Dijkstra and A* written from scratch." />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <aside class="panel" id="panel">
+    <header class="panel-head">
+      <h1>Route Finder</h1>
+      <button id="theme" class="icon-btn" title="Toggle dark mode" aria-label="Toggle dark mode">◐</button>
+    </header>
+
+    <p class="hint" id="hint">Click the map to set a <b>start</b> point.</p>
+
+    <div class="field-row">
+      <label>From <input id="from" list="landmarks" placeholder="Search a place…" /></label>
+      <label>To <input id="to" list="landmarks" placeholder="Search a place…" /></label>
+      <datalist id="landmarks"></datalist>
+    </div>
+
+    <label class="field">Algorithm
+      <select id="algo">
+        <option value="astar">A* (haversine heuristic)</option>
+        <option value="dijkstra">Dijkstra</option>
+        <option value="compare">Compare both</option>
+      </select>
+    </label>
+
+    <div class="toggles">
+      <label><input type="checkbox" id="animate" checked /> Animate search</label>
+      <label><input type="checkbox" id="showGraph" /> Show graph</label>
+      <label><input type="checkbox" id="blockMode" /> Block roads (click a road)</label>
+    </div>
+
+    <div class="buttons">
+      <button id="reset">Reset points</button>
+      <button id="unblock">Clear blocks</button>
+    </div>
+
+    <div id="error" class="error" hidden></div>
+
+    <section id="stats" class="stats" hidden>
+      <div class="big"><span id="dist">–</span><small>distance</small></div>
+      <div class="big"><span id="walk">–</span><small>walking</small></div>
+      <table>
+        <thead><tr><th></th><th>Nodes visited</th><th>Time</th><th>Length</th></tr></thead>
+        <tbody id="statRows"></tbody>
+      </table>
+    </section>
+
+    <footer class="legend">
+      <span><i class="dot start"></i>Start</span>
+      <span><i class="dot end"></i>End</span>
+      <span><i class="dot dij"></i>Dijkstra explored</span>
+      <span><i class="dot ast"></i>A* explored</span>
+      <span><i class="line blocked"></i>Blocked</span>
+    </footer>
+  </aside>
+
+  <main id="map" aria-label="Map"></main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module" src="js/ui.js"></script>
+</body>
+</html>
